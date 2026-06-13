@@ -1,0 +1,22 @@
+name: kolomoni_liveness_example
+description: Demonstrates how to integrate and test the Kolomoni Liveness Verification SDK.
+version: 1.0.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  kolomoni_liveness_sdk:
+    path: ../liveness_sdk
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true

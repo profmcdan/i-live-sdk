@@ -1,0 +1,14 @@
+services:
+  liveness-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kolomoni-liveness-api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./app:/app/app
+      - ./mock_storage:/app/mock_storage
+    restart: always

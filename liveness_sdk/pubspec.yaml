@@ -1,0 +1,24 @@
+name: kolomoni_liveness_sdk
+description: A Flutter SDK for Face Liveness Verification, supporting AWS Rekognition and alternative providers with passive/active liveness UI.
+version: 1.0.0
+homepage: https://github.com/cst-group/kolomoni-liveness-sdk
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  camera: ^0.10.5+9
+  http: ^1.2.0
+  path_provider: ^2.1.2
+  uuid: ^4.3.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true

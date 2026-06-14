@@ -9,7 +9,7 @@ AWS Rekognition uploads the reference image (the face cutout used to evaluate li
 
 1. Open the **Amazon S3 Console**.
 2. Click **Create bucket**.
-3. Enter a unique bucket name (e.g., `kolomoni-liveness-audit`).
+3. Enter a unique bucket name (e.g., `faceguard-liveness-audit`).
 4. Select the target region (e.g., `us-east-1`).
 5. Keep **Block all public access** enabled to preserve security.
 6. Enable **Bucket Key** under Encryption settings to reduce KMS costs.
@@ -54,20 +54,20 @@ You must grant your FastAPI Backend API credentials to create liveness sessions 
                 "s3:PutObject",
                 "s3:GetObject"
             ],
-            "Resource": "arn:aws:s3:::kolomoni-liveness-bucket/*"
+            "Resource": "arn:aws:s3:::faceguard-liveness-bucket/*"
         }
     ]
 }
 ```
 
 4. Click **Next: Tags** -> **Next: Review**.
-5. Policy Name: `KolomoniLivenessAccessPolicy`.
+5. Policy Name: `FaceGuardLivenessAccessPolicy`.
 6. Click **Create policy**.
 
 ### Create an IAM User
 1. Go to **Users** -> **Add users**.
-2. Username: `kolomoni-liveness-service`.
-3. Select **Attach policies directly** and search for `KolomoniLivenessAccessPolicy`.
+2. Username: `faceguard-liveness-service`.
+3. Select **Attach policies directly** and search for `FaceGuardLivenessAccessPolicy`.
 4. Finish creating the user.
 5. Open the created user profile, navigate to the **Security credentials** tab, and click **Create access key**.
 6. Select **Application running outside AWS** as the use case.
@@ -86,7 +86,7 @@ MOCK_AWS=false
 AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
 AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
 AWS_REGION=us-east-1
-LIVENESS_BUCKET=kolomoni-liveness-audit
+LIVENESS_BUCKET=faceguard-liveness-audit
 ```
 
 Restart the FastAPI backend (e.g. `docker compose up --build`). The backend service will now communicate directly with AWS Rekognition Face Liveness.
@@ -103,10 +103,10 @@ To allow the mobile SDK to stream video frames directly to AWS via WebSockets, t
    - Click **Next**.
 4. **Step 2: Configure permissions**
    - Under both **Authenticated role** and **Guest access role**, choose **Create a new IAM role**.
-   - Note the generated guest/unauthenticated role name or customize it (e.g., `Cognito_KolomoniLivenessPoolUnauth_Role`).
+   - Note the generated guest/unauthenticated role name or customize it (e.g., `Cognito_FaceGuardLivenessPoolUnauth_Role`).
    - Click **Next**.
 5. **Step 3: Configure properties**
-   - Enter the **Identity pool name** (e.g., `KolomoniLivenessIdentityPool`).
+   - Enter the **Identity pool name** (e.g., `FaceGuardLivenessIdentityPool`).
    - Click **Next**.
 6. **Step 4: Review and create**
    - Review your settings and click **Create identity pool**.
@@ -134,5 +134,3 @@ To allow the mobile SDK to stream video frames directly to AWS via WebSockets, t
    COGNITO_REGION=eu-west-1
    ```
 10. Restart the FastAPI backend. The mobile SDK will now automatically run the official AWS Amplify live streaming verification view.
-
-

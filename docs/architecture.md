@@ -1,6 +1,6 @@
-# Architectural Design - Biometric Liveness Verification
+# Architectural Design - FaceGuard Biometric Liveness Verification
 
-This document details the system components, data flows, and architectural decoupling mechanisms implemented in the CST Biometric Liveness solution.
+This document details the system components, database storage layer, data flows, and architectural decoupling mechanisms implemented in the FaceGuard Biometric Liveness solution.
 
 ---
 
@@ -9,6 +9,7 @@ This document details the system components, data flows, and architectural decou
 ```
 ┌───────────────┐         Method Invocation         ┌──────────────────────┐
 │  Flutter App  │ ────────────────────────────────> │ Liveness SDK Package │
+│  (Example UI)  │                                   └──────────────────────┘
 └───────────────┘                                   └──────────────────────┘
         │                                                      │
         │                                                      │ Triggers
@@ -21,59 +22,44 @@ This document details the system components, data flows, and architectural decou
         └───────────────────────┬──────────────────────────────┘
                                 │
                                 ▼
-                    ┌──────────────────────┐
-                    │ FastAPI Backend API  │
-                    └──────────────────────┘
-                                │
-                                │ Boto3 Rekognition client calls
-                                ▼
-                    ┌──────────────────────┐
-                    │ AWS Rekognition Service
-                    └──────────────────────┘
+                     ┌──────────────────────┐
+                     │ FastAPI Backend API  │
+                     └──────────────────────┘
+                       │                  │
+    Reads/Writes Audits│                  │ Boto3 Rekognition client calls
+                       ▼                  ▼
+             ┌───────────┐      ┌──────────────────────┐
+             │Postgres DB│      │ AWS Rekognition/S3   │
+             └───────────┘      └──────────────────────┘
 ```
 
 ---
 
 ## Detailed Sequence Flow
 
-The following sequence diagram represents the step-by-step process of creating a session, running the interactive guided camera scan, uploading frame telemetry, and verifying the liveness check against the fraud decision matrix.
+The process consists of two primary use cases: **Customer Onboarding** and **Account Face Verification**.
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant App as Flutter App
-    participant SDK as Liveness SDK
-    participant API as FastAPI Backend
-    participant AWS as AWS Rekognition
+### A. Customer Onboarding Flow
+1. **App** sends Customer details (BVN, email, phone, channel) to backend `POST /api/v1/liveness/customer`.
+2. **Backend API** queries Postgres to check for existing onboarded customers with same `(bvn, channel)` unique key.
+   * If a successful onboarding exists, returns `400 Bad Request` block.
+   * If it doesn't exist, generates a new pure UUID `customer_id` and registers customer in database.
+   * If registration exists but has failed previous checks, allows onboarding retry and returns existing `customer_id`.
+3. **App** creates onboarding session (`POST /api/v1/liveness/session?verification_type=ONBOARDING&channel=x`).
+4. **Backend** initializes Rekognition Liveness session and returns `session_id`.
+5. **App** launches guided Camera UI (Google ML Kit gestures or AWS Cognito live streams), performs blink/tilt gestures, and records a 2.5-second video.
+6. **App** uploads mp4 video to backend `POST /session/{session_id}/video/upload` (which uploads directly to S3) and calls `POST /verify`.
+7. **Backend** queries liveness status. On liveness pass, saves the reference image URI as `customer.reference_image_path` in the Postgres database.
+8. **Backend** returns onboarding success result.
 
-    App->>SDK: initialize(backendUrl, environment)
-    Note over App,SDK: Ready for secure triggers
-    
-    App->>SDK: verify(context)
-    SDK->>API: POST /api/v1/liveness/session
-    API->>AWS: create_face_liveness_session()
-    AWS-->>API: Response (SessionId)
-    API-->>SDK: Response (session_id)
-    
-    SDK->>SDK: Launch Camera UI
-    SDK->>SDK: Face Alignment Checks (Oval Frame overlay)
-    SDK->>SDK: Record 2-5s video / frame sequence
-    Note over SDK: Active gestures (like blinking) are triggered if required
-    SDK->>SDK: Save video stream (transient temporary file)
-    
-    SDK->>API: POST /api/v1/liveness/verify (session_id, DeviceTelemetry)
-    Note over API: Log telemetry for anti-tamper audits
-    API->>AWS: get_face_liveness_session_results(SessionId)
-    AWS-->>API: Response (Confidence, Status: SUCCEEDED)
-    
-    Note over API: Apply Decision Rules:<br/>Pass (>=95%)<br/>Medium (80-94%) -> OTP<br/>Fail (<80%) -> Block
-    
-    API-->>SDK: Verification Result (PASS / FAIL / MEDIUM_RISK)
-    SDK->>SDK: Securely delete transient video files
-    SDK-->>App: Return LivenessResult
-    
-    Note over App: Complete transaction or block/warn user
-```
+### B. Account Face Verification Flow
+1. **App** initializes verification session using only User ID and Channel (`POST /api/v1/liveness/session?verification_type=VERIFICATION&channel=x`).
+2. **Backend** checks if customer exists and has a reference image on file. Returns `session_id`.
+3. **App** captures user's face, uploads the mp4 video, and requests verify.
+4. **Backend** fetches liveness outcome. On liveness pass, it performs **Face Comparison**:
+   * **AWS Mode**: Compares reference S3 image path with the current session verification image path using AWS Rekognition `compare_faces`.
+   * **Mock Mode**: Simulates comparison check based on customer ID formats.
+5. If comparison similarity is below threshold (90%) or face mismatch is detected, session status is changed to `FAIL` and authentication is blocked.
 
 ---
 
@@ -84,9 +70,15 @@ To avoid vendor lock-in with AWS Rekognition, the SDK isolates engine-specific l
 ```dart
 abstract class LivenessProvider {
   Future<void> initialize(LivenessConfig config);
-  Future<LivenessResult> verify(BuildContext context);
+  Future<LivenessResult> verify(
+    BuildContext context, {
+    String? userId,
+    String? bvn,
+    String? verificationType,
+    String? channel,
+  });
   bool get isInitialized;
 }
 ```
 
-The consumer application interacts only with the top-level `LivenessSDK` static interface. This design allows swapping the underlying implementation class from `AwsRekognitionLivenessProvider` to another vendor (e.g., `FaceTecLivenessProvider`, `iProovLivenessProvider`, or `JumioLivenessProvider`) through config updates without changing any code in downstream mobile applications.
+The consumer application interacts only with the top-level `LivenessSDK` static interface. This design allows swapping the underlying implementation class from `AwsRekognitionLivenessProvider` to `GoogleMlKitLivenessProvider` or another vendor through configurations centrally on the backend API without changing any code in downstream mobile applications.

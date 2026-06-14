@@ -1,70 +1,130 @@
 # API Reference Specification
 
-This reference guide documents the API contracts for the FastAPI Backend REST endpoints and the Flutter SDK library.
+This reference guide documents the API contracts for the FaceGuard Backend REST endpoints and the Flutter SDK library.
 
 ---
 
 ## 1. FastAPI Backend API
 
-### Initialize Liveness Session
-Creates a unique session tracker in AWS Rekognition.
+### Create Onboarding Customer Record
+Registers a new customer profile before liveness check.
 
-* **Endpoint**: `/api/v1/liveness/session`
+* **Endpoint**: `/api/v1/liveness/customer`
 * **Method**: `POST`
 * **Content-Type**: `application/json`
 * **Response Status**: `201 Created`
 
 #### Request Payload
-*(None)*
+```json
+{
+  "bvn": "11122233344",
+  "email": "cust@example.com",
+  "phone": "+2348000000000",
+  "channel": "personal"
+}
+```
 
 #### Response Body
 ```json
 {
-  "session_id": "mock_session_e90f23d11b5a",
-  "provider": "mock_provider",
-  "status": "CREATED"
+  "customer_id": "f5165d4b-df73-4ea2-bc89-183063bd70b1",
+  "bvn": "11122233344",
+  "email": "cust@example.com",
+  "phone": "+2348000000000",
+  "channel": "personal",
+  "created_at": 1718293860.12
 }
-```
-
-#### Example Curl
-```bash
-curl -X POST http://localhost:8000/api/v1/liveness/session \
-  -H "Content-Type: application/json"
 ```
 
 ---
 
-### Verify Liveness Session
-Submits a liveness session for validation, collects telemetry logs, and returns the authentication decision.
+### Initialize Liveness Session
+Creates a liveness session configuration tracker.
 
-* **Endpoint**: `/api/v1/liveness/verify`
+* **Endpoint**: `/api/v1/liveness/session`
 * **Method**: `POST`
-* **Content-Type**: `application/json`
-* **Response Status**: `200 OK`
-
-#### Request Body
-```json
-{
-  "session_id": "mock_session_e90f23d11b5a",
-  "device_intelligence": {
-    "device_id": "dev_id_1718293848",
-    "device_model": "iPhone 15 Pro",
-    "device_os": "iOS 17.2",
-    "ip_address": "192.168.1.1",
-    "latitude": "6.5244",
-    "longitude": "3.3792"
-  }
-}
-```
+* **Query Parameters**:
+  * `preferred_mode` (Optional, string): e.g. `ACTIVE` or `PASSIVE`
+  * `user_id` (Optional, string): Customer UUID string
+  * `bvn` (Optional, string): 11-digit BVN
+  * `verification_type` (Optional, string): `ONBOARDING` or `VERIFICATION`
+  * `channel` (Optional, string): `personal` or `business`
+* **Response Status**: `201 Created`
 
 #### Response Body
 ```json
 {
-  "status": "PASS",
-  "confidence": 98.7,
-  "provider_session_id": "mock_session_e90f23d11b5a",
-  "timestamp": 1718293860.12,
-  "image_reference": "mock://reference_images/face_audit_mock.jpg"
+  "session_id": "371baebd-d87a-4a89-9681-10888e5420b9",
+  "provider": "google_ml_kit",
+  "status": "CREATED",
+  "liveness_mode": "PASSIVE_WITH_ACTIVE_FALLBACK",
+  "user_id": "f5165d4b-df73-4ea2-bc89-183063bd70b1",
+  "bvn": "11122233344",
+  "verification_type": "ONBOARDING",
+  "channel": "personal"
+}
+```
+
+---
+
+### Upload Session Video
+Accepts and stores liveness verification video on S3.
+
+* **Endpoint**: `/api/v1/liveness/session/{session_id}/video/upload`
+* **Method**: `POST`
+* **Content-Type**: `multipart/form-data`
+* **Response Status**: `200 OK`
+
+---
+
+### Get Replay URL (Admin only)
+Generates S3 presigned URL for playback.
+
+* **Endpoint**: `/api/v1/liveness/session/{session_id}/video`
+* **Method**: `GET`
+* **Headers**: `Authorization: Bearer <JWT_Token>`
+* **Response Body**:
+```json
+{
+  "url": "https://faceguard-liveness-bucket.s3.amazonaws.com/custom-liveness-videos/..."
+}
+```
+
+---
+
+### List Liveness Sessions (Admin only)
+Returns paginated log table records.
+
+* **Endpoint**: `/api/v1/liveness/sessions`
+* **Method**: `GET`
+* **Headers**: `Authorization: Bearer <JWT_Token>`
+* **Query Parameters**: `limit`, `offset`, `search`
+* **Response Body**:
+```json
+{
+  "total": 12,
+  "limit": 10,
+  "offset": 0,
+  "sessions": [
+    {
+      "session_id": "371baebd-d87a-4a89-9681-10888e5420b9",
+      "user_id": "f5165d4b-df73-4ea2-bc89-183063bd70b1",
+      "bvn": "11122233344",
+      "channel": "personal",
+      "verification_type": "ONBOARDING",
+      "face_match_status": "MATCH",
+      "face_match_confidence": 98.2,
+      "provider": "google_ml_kit",
+      "liveness_mode": "PASSIVE",
+      "status": "PASS",
+      "confidence": 99.4,
+      "image_reference": "s3://bucket/ref.jpg",
+      "video_reference": "s3://bucket/vid.mp4",
+      "device_intelligence": "{...}",
+      "created_at": 1718293860.12,
+      "updated_at": 1718293870.44
+    }
+  ]
 }
 ```
 
@@ -90,14 +150,18 @@ static Future<void> initialize({
 
 #### `verify` static method
 ```dart
-static Future<LivenessResult> verify(BuildContext context)
+static Future<LivenessResult> verify(
+  BuildContext context, {
+  String? userId,
+  String? bvn,
+  String? verificationType,
+  String? channel,
+})
 ```
 
 ---
 
 ### `LivenessResult` Class
-
-Representing the output details of a liveness run:
 
 | Field | Type | Description |
 |---|---|---|
@@ -109,16 +173,3 @@ Representing the output details of a liveness run:
 | `imageReference` | `String` | Remote S3 URI referencing the saved audit frame. |
 | `errorMessage` | `String?` | Non-null description of failure if liveness verification failed. |
 | `timestamp` | `DateTime` | Timestamp of the event execution. |
-
----
-
-### `LivenessStatus` Enum
-
-* `LivenessStatus.pass`: Match confidence meets or exceeds `95%`.
-* `LivenessStatus.mediumRisk`: Match confidence between `80% - 94%`. Triggers secondary authentication (e.g., OTP).
-* `LivenessStatus.lowConfidence`: Match confidence below `80%`. High risk of spoofing. Action blocked.
-* `LivenessStatus.fail`: Face validation check failed.
-* `LivenessStatus.timeout`: Liveness execution exceeded session limit.
-* `LivenessStatus.cameraDenied`: User refused or blocked camera permissions.
-* `LivenessStatus.networkError`: Device failed to connect with verification backend API.
-* `LivenessStatus.cancelled`: Process aborted by physical navigation/dismissal.

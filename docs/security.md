@@ -1,6 +1,6 @@
 # Security & Compliance Specification
 
-This document details CST Group security policies, data guidelines, and anti-tamper mechanisms implemented for biometric liveness verification.
+This document details FaceGuard security policies, data guidelines, and anti-tamper mechanisms implemented for biometric liveness verification.
 
 ---
 

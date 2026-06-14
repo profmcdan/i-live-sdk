@@ -1,6 +1,6 @@
-# Kolomoni Biometric Liveness Verification SDK & API
+# FaceGuard Biometric Liveness Verification SDK & API
 
-A production-grade, enterprise-ready biometric liveness verification solution designed for CST Group applications (including Kolomoni Personal Banking, Business Banking, and Agency Banking). This repository contains both a **reusable Flutter Liveness SDK** and a **FastAPI backend** that aggregates and validates AWS Rekognition Face Liveness sessions.
+A production-grade, enterprise-ready biometric liveness verification solution designed for applications utilizing the FaceGuard biometric suite. This repository contains both a **reusable Flutter Liveness SDK** and a **FastAPI backend** that aggregates and validates AWS Rekognition and Google ML Kit Face Liveness sessions.
 
 ---
 
@@ -10,22 +10,18 @@ A production-grade, enterprise-ready biometric liveness verification solution de
 .
 ├── README.md               # Central entrypoint and quickstart guide
 ├── docs/                   # In-depth design & integration documentation
-│   ├── architecture.md     # Architecture designs & transaction flows
-│   ├── api_reference.md    # API contracts (Backend endpoints & Dart classes)
-│   ├── security.md         # Data protection (NDPA/GDPR), anti-tampering & encryption
-│   ├── sdk_guide.md        # SDK configuration and usage handbook for developers
-│   └── aws_setup.md        # AWS Rekognition & S3 console setup checklist
+├── docs/architecture.md    # Architecture designs & transaction flows
+├── docs/api_reference.md   # API contracts (Backend endpoints & Dart classes)
+├── docs/security.md        # Data protection (NDPA/GDPR), anti-tampering & encryption
+├── docs/sdk_guide.md       # SDK configuration and usage handbook for developers
+├── docs/aws_setup.md       # AWS Rekognition & S3 console setup checklist
 ├── backend/                # FastAPI backend API
-│   ├── app/                # Application module (config, routers, services)
-│   ├── Dockerfile          # Multi-stage Docker deployment setup
-│   ├── docker-compose.yml  # Docker Compose script for local development/testing
-│   └── run.sh              # Direct run command script
+├── backend/app/            # Application module (config, routers, services, models)
+├── backend/alembic/        # Alembic database schema migrations (Versions 001 - 003)
+├── backend/Dockerfile      # Multi-stage Docker deployment setup
+├── backend/docker-compose.yml # Docker Compose script for local development/testing
 ├── liveness_sdk/           # Reusable Flutter Liveness Verification SDK Package
-│   ├── lib/                # SDK classes & UI views
-│   └── pubspec.yaml        # SDK package configuration
-└── example/                # Demo Flutter app showing multi-use case integration
-    ├── lib/
-    └── pubspec.yaml
+└── example/                # Rebrand demo Flutter app showing multi-use case integration
 ```
 
 ---
@@ -33,9 +29,11 @@ A production-grade, enterprise-ready biometric liveness verification solution de
 ## Key Features
 
 1. **Anti-Spoof Defense**: Supports passive and active challenge fallbacks to prevent screen replay, deepfakes, printed/synthetic media attacks, etc.
-2. **Provider Abstraction**: A decoupled Flutter architecture allows swapping backend liveness engines (AWS Rekognition, FaceTec, iProov, Jumio) dynamically without changes to downstream banking clients.
-3. **Device Intelligence Integration**: Collects device models, coordinates, IP addresses, and tamper signatures alongside session verification to feed the Fraud Detection Engine.
-4. **Mock Testing Mode**: Start development immediately! Supports simulated liveness audits on both frontend and backend for testing without active AWS credentials or camera hardware.
+2. **Provider Abstraction**: A decoupled Flutter architecture allows swapping backend liveness engines (AWS Rekognition, Google ML Kit, Mock) dynamically without changes to downstream client apps.
+3. **Database Audit Logging**: Configured with PostgreSQL and managed using Alembic schema migrations. Stores session metadata, coordinates, and device intelligence.
+4. **Interactive Security Dashboard**: FaceGuard Admin panel with real-time KPI metrics (Success Rate, Threats Blocked), trend charts, and secure S3 presigned URL video replays.
+5. **Onboarding retry and segmentation**: Enforces Unique `(bvn, channel)` constraints with personal/business channel segmentation, allowing retries on failed check sessions.
+6. **Advanced ML Kit Gestures**: Features eye-blink detection alongside head movements (Tilt Up, Tilt Down, Tilt Sideways).
 
 ---
 
@@ -46,38 +44,16 @@ A production-grade, enterprise-ready biometric liveness verification solution de
 - Docker & Docker Compose (for containerized setup)
 
 ### Running with Docker Compose (Recommended)
-By default, Docker Compose spins up the backend in **Mock mode** (`MOCK_AWS=true`).
+By default, Docker Compose spins up the backend, runs Alembic migrations, and boots the PostgreSQL DB container.
 1. Navigate to the backend directory:
    ```bash
    cd backend
    ```
-2. Start the service:
+2. Start the services:
    ```bash
-   docker-compose up --build
+   docker compose up --build
    ```
 3. The API will be available at `http://localhost:8000`. You can inspect the interactive OpenAPI spec at `http://localhost:8000/docs`.
-
-### Running Locally without Docker
-1. Install Python dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-2. Execute the runner script:
-   ```bash
-   ./run.sh
-   ```
-
-### AWS Rekognition Setup
-To configure production credentials:
-1. Create a `.env` file inside `backend/`:
-   ```env
-   MOCK_AWS=false
-   AWS_ACCESS_KEY_ID=your_access_key
-   AWS_SECRET_ACCESS_KEY=your_secret_key
-   AWS_REGION=us-east-1
-   LIVENESS_BUCKET=your-liveness-audit-s3-bucket
-   ```
-2. Re-run with `docker-compose up` or `./run.sh`.
 
 ---
 
@@ -99,18 +75,20 @@ import 'package:kolomoni_liveness_sdk/kolomoni_liveness_sdk.dart';
 await LivenessSDK.initialize(
   backendUrl: 'http://localhost:8000', // or your staging api
   environment: LivenessEnvironment.development,
-  forceMockMode: false, // Set to true to test without a running backend
 );
 
-// Trigger a check during high-risk events (e.g. Transfers, PIN Reset)
-final result = await LivenessSDK.verify(context);
+// Trigger check
+final result = await LivenessSDK.verify(
+  context,
+  userId: 'customer-uuid-here',
+  verificationType: 'VERIFICATION',
+  channel: 'personal',
+);
 
 if (result.success) {
   print('Authorized! Confidence: ${result.confidence}%');
-  // Proceed with transaction...
 } else {
   print('Blocked: ${result.errorMessage}');
-  // Show error screen...
 }
 ```
 

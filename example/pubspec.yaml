@@ -1,5 +1,5 @@
 name: kolomoni_liveness_example
-description: Demonstrates how to integrate and test the Kolomoni Liveness Verification SDK.
+description: Demonstrates how to integrate and test the FaceGuard Liveness Verification SDK.
 version: 1.0.0
 publish_to: 'none'
 
@@ -12,6 +12,7 @@ dependencies:
     sdk: flutter
   kolomoni_liveness_sdk:
     path: ../liveness_sdk
+  http: ^1.2.0
 
 dev_dependencies:
   flutter_test:

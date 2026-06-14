@@ -10,5 +10,44 @@ services:
       - .env
     volumes:
       - ./app:/app/app
-      - ./mock_storage:/app/mock_storage
+    depends_on:
+      liveness-db:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
     restart: always
+
+  liveness-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-liveness}
+    ports:
+      - "5433:5432"
+    volumes:
+      - liveness_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d liveness"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+
+  migrator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kolomoni-liveness-migrator
+    command: alembic upgrade head
+    env_file:
+      - .env
+    volumes:
+      - ./app:/app/app
+      - ./alembic:/app/alembic
+      - ./alembic.ini:/app/alembic.ini
+    depends_on:
+      liveness-db:
+        condition: service_healthy
+
+volumes:
+  liveness_postgres_data:

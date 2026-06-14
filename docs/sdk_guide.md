@@ -93,12 +93,21 @@ void onTransferTriggered(BuildContext context) async {
 
 ---
 
-## 4. Customizing Verification Modes (API Configured)
-The verification screen style adapts dynamically based on backend configurations. The backend `/session` endpoint returns either:
-- `PASSIVE`: Direct face photo scan (no gestures required).
-- `ACTIVE`: Requires facial movement (forced blink).
-- `PASSIVE_WITH_ACTIVE_FALLBACK`: Initiates passive first, then prompts for active challenge if verification conditions are sub-optimal.
-This lets you configure security levels centrally on the backend API without releasing new mobile app versions.
+## 4. Customizing Verification Providers and Modes (API Configured)
+The liveness verification provider and challenges adapt dynamically based on backend configurations.
+
+### Active Provider Options
+Configure `LIVENESS_PROVIDER` in your backend `.env` settings:
+- `aws_rekognition`: Stream real-time camera frames to AWS Rekognition using Cognito Identity pools.
+- `google_ml_kit`: Run on-device face and gesture detection with Google ML Kit Face Detection.
+- `mock_provider`: Simulated capture for local testing.
+
+### Liveness Modes
+The backend `/session` endpoint dictates how the active provider executes gestures (using the `liveness_mode` parameter):
+- `PASSIVE`: Direct face photo scan / holding steady.
+- `ACTIVE` or `PASSIVE_WITH_ACTIVE_FALLBACK`: Requires face alignment, followed by a randomized set of **two** active liveness challenges (selected from a pool: blink, smile, turn head left, turn head right).
+
+This allows you to configure security levels, providers, and parameters centrally on the backend API without releasing new mobile app versions.
 
 ---
 
@@ -142,4 +151,25 @@ By default, the server runs on `http://localhost:8000`.
    flutter run
    ```
 4. Select the target Android device from the terminal prompt or IDE target device selector.
+
+---
+
+## 6. Troubleshooting
+
+### Emulator Camera displays blurred colors or Virtual Scene
+By default, the Android Emulator's camera is configured to render a 3D "Virtual Scene" (which looks like a blurred, cartoonish room or moving gradients). Because this virtual feed contains no real human face, the AWS Rekognition `FaceLivenessDetector` will fail to detect a face, causing verification to time out or fail.
+
+To resolve this during testing:
+1. **Mock Mode (Recommended for general testing)**:
+   In the example app UI testing panel, toggle on **"Simulate Offline Mode (Forced Mock)"**. This bypasses both the real camera and AWS, simulating the liveness verification flow via local mock states without needing a physical face.
+2. **Real Webcam Integration (For testing live AWS Rekognition)**:
+   If you need to test the real AWS live-streaming flow, map the emulator's front camera to your computer's webcam:
+   * Open the **Android Studio Device Manager** (AVD Manager).
+   * Click the **Edit (pencil icon)** next to your active virtual device.
+   * Click **Show Advanced Settings**.
+   * Scroll down to the **Camera** section.
+   * Change the **Front** camera from `VirtualScene` to `Webcam0` (or your computer's built-in webcam).
+   * Click **Finish** and restart the emulator.
+   * Now, the camera stream will show your actual webcam feed, allowing you to position your face in the oval frame to complete the liveness verification.
+
 

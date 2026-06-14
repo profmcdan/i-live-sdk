@@ -54,7 +54,7 @@ You must grant your FastAPI Backend API credentials to create liveness sessions 
                 "s3:PutObject",
                 "s3:GetObject"
             ],
-            "Resource": "arn:aws:s3:::YOUR_S3_BUCKET_NAME/*"
+            "Resource": "arn:aws:s3:::kolomoni-liveness-bucket/*"
         }
     ]
 }
@@ -90,3 +90,49 @@ LIVENESS_BUCKET=kolomoni-liveness-audit
 ```
 
 Restart the FastAPI backend (e.g. `docker compose up --build`). The backend service will now communicate directly with AWS Rekognition Face Liveness.
+
+---
+
+## Step 4: Create Cognito Identity Pool (Required for Option A Live Streaming)
+To allow the mobile SDK to stream video frames directly to AWS via WebSockets, the client requires temporary unauthenticated credentials.
+
+1. Open the **Amazon Cognito Console**.
+2. Click **Create identity pool**.
+3. **Step 1: Configure identity pool trust**
+   - Select **Guest access** (this enables Unauthenticated identities, allowing clients to stream video frames before/during identity checks).
+   - Click **Next**.
+4. **Step 2: Configure permissions**
+   - Under both **Authenticated role** and **Guest access role**, choose **Create a new IAM role**.
+   - Note the generated guest/unauthenticated role name or customize it (e.g., `Cognito_KolomoniLivenessPoolUnauth_Role`).
+   - Click **Next**.
+5. **Step 3: Configure properties**
+   - Enter the **Identity pool name** (e.g., `KolomoniLivenessIdentityPool`).
+   - Click **Next**.
+6. **Step 4: Review and create**
+   - Review your settings and click **Create identity pool**.
+7. Once created, copy the **Identity Pool ID** (formatted as `region:guid-guid-guid` e.g., `eu-west-1:xxxx-xxxx-xxxx-xxxx`).
+8. Open the generated **Guest access / Unauthenticated Role** inside the IAM Console and attach the following inline policy:
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "rekognition:StartFaceLivenessSession"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+```
+
+9. Update the backend `.env` configuration file:
+   ```env
+   COGNITO_POOL_ID=eu-west-1:your-identity-pool-guid-here
+   COGNITO_REGION=eu-west-1
+   ```
+10. Restart the FastAPI backend. The mobile SDK will now automatically run the official AWS Amplify live streaming verification view.
+
+

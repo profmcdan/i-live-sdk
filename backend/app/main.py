@@ -32,7 +32,37 @@ app.add_middleware(
 )
 
 # Register routers
+from app.routers import auth_router
 app.include_router(liveness_router.router)
+app.include_router(auth_router.router)
+
+from app.database import SessionLocal
+from app.models import User
+from app.auth_utils import hash_password
+
+@app.on_event("startup")
+def startup_event():
+    logger.info("Initializing database session and seeding admin user...")
+    db = SessionLocal()
+    try:
+        admin = db.query(User).filter(User.email == settings.ADMIN_EMAIL).first()
+        if not admin:
+            logger.info(f"Admin user not found. Seeding admin: {settings.ADMIN_EMAIL}")
+            hashed_pw = hash_password(settings.ADMIN_PASSWORD)
+            admin_user = User(
+                email=settings.ADMIN_EMAIL,
+                hashed_password=hashed_pw,
+                role="admin"
+            )
+            db.add(admin_user)
+            db.commit()
+            logger.info("Admin user seeded successfully.")
+        else:
+            logger.info("Admin user already seeded.")
+    except Exception as e:
+        logger.error(f"Error seeding admin user: {e}")
+    finally:
+        db.close()
 
 @app.get("/health", tags=["system"])
 async def health_check():

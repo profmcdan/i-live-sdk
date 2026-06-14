@@ -125,8 +125,8 @@ class _LivenessCameraViewState extends State<LivenessCameraView> with SingleTick
       setState(() {
         if (mode == 'ACTIVE') {
           _currentStage = 2;
-          _challengeInstruction = 'Please BLINK twice now';
-          _guideMessage = 'Blink twice clearly';
+          _challengeInstruction = 'Please BLINK clearly';
+          _guideMessage = 'Blink clearly';
         } else {
           _currentStage = 1;
           _guideMessage = 'Keep steady. Capturing...';
@@ -143,8 +143,8 @@ class _LivenessCameraViewState extends State<LivenessCameraView> with SingleTick
           if (!mounted) return;
           setState(() {
             _currentStage = 2;
-            _challengeInstruction = 'Please BLINK twice now';
-            _guideMessage = 'Blink twice clearly';
+            _challengeInstruction = 'Please BLINK clearly';
+            _guideMessage = 'Blink clearly';
           });
         });
       }
@@ -175,22 +175,8 @@ class _LivenessCameraViewState extends State<LivenessCameraView> with SingleTick
 
       _recordedVideo = videoFile;
       
-      // Complete and exit with success, clean up file afterwards
-      Navigator.of(context).pop(true);
-      
-      // Safety delete in background after popping (FR-012/Security)
-      Future.delayed(const Duration(seconds: 2), () async {
-        try {
-          final file = File(videoFile.path);
-          if (await file.exists()) {
-            await file.delete();
-            debugPrint('LivenessSDK: Securely deleted local audit video frame storage');
-          }
-        } catch (e) {
-          debugPrint('LivenessSDK: Error deleting local file: $e');
-        }
-      });
-
+      // Complete and exit returning the recorded video file path
+      Navigator.of(context).pop(videoFile.path);
     } catch (e) {
       debugPrint('LivenessSDK: Recording stop error: $e');
       _showError('Analysis failed during video capture');
@@ -389,7 +375,7 @@ class _LivenessCameraViewState extends State<LivenessCameraView> with SingleTick
                   // Challenge prompt bubble (e.g. blink challenge)
                   if (_currentStage == 2 && _challengeInstruction.isNotEmpty)
                     Padding(
-                      padding: const EdgeInsets.bottom(15.0),
+                      padding: const EdgeInsets.only(bottom: 15.0),
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                         decoration: BoxDecoration(
@@ -412,8 +398,8 @@ class _LivenessCameraViewState extends State<LivenessCameraView> with SingleTick
                               _challengeInstruction,
                               style: const TextStyle(
                                 color: Colors.black87,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w800,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w800,
                               ),
                             ),
                           ],
@@ -421,11 +407,10 @@ class _LivenessCameraViewState extends State<LivenessCameraView> with SingleTick
                       ),
                     ),
                   
-                  // Main guide box
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                     decoration: BoxDecoration(
-                      color: Colors.black80,
+                      color: Colors.black.withOpacity(0.8),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
                         color: Colors.white24,

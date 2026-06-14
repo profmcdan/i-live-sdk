@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:kolomoni_liveness_sdk/kolomoni_liveness_sdk.dart';
 
 void main() {
@@ -6,12 +8,12 @@ void main() {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Kolomoni Biometric Demo',
+      title: 'Liveness Demo',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark().copyWith(
         primaryColor: const Color(0xFF0D47A1), // Sleek Banking Navy Blue
@@ -19,7 +21,7 @@ class MyApp extends StatelessWidget {
         colorScheme: const ColorScheme.dark(
           primary: Color(0xFF2979FF),
           secondary: Color(0xFF00E676), // Verify Success Green
-          surface: Color(0xFF171B26),
+          surface: Color(0xFF171B26), 
         ),
       ),
       home: const DemoHomeScreen(),
@@ -28,28 +30,39 @@ class MyApp extends StatelessWidget {
 }
 
 class DemoHomeScreen extends StatefulWidget {
-  const DemoHomeScreen({Key? key}) : super(key: key);
+  const DemoHomeScreen({super.key});
 
   @override
   State<DemoHomeScreen> createState() => _DemoHomeScreenState();
 }
 
 class _DemoHomeScreenState extends State<DemoHomeScreen> {
-  bool _forceMock = true;
-  String _backendUrl = 'http://localhost:8000';
+  bool _forceMock = false;
   LivenessResult? _lastResult;
   bool _isProcessing = false;
+
+  late final TextEditingController _userIdController;
+  late final TextEditingController _backendUrlController;
 
   @override
   void initState() {
     super.initState();
+    _userIdController = TextEditingController(text: 'cst_user_8855');
+    _backendUrlController = TextEditingController(text: 'http://10.0.2.2:8000');
     _initializeSDK();
+  }
+
+  @override
+  void dispose() {
+    _userIdController.dispose();
+    _backendUrlController.dispose();
+    super.dispose();
   }
 
   Future<void> _initializeSDK() async {
     try {
       await LivenessSDK.initialize(
-        backendUrl: _backendUrl,
+        backendUrl: _backendUrlController.text,
         environment: LivenessEnvironment.development,
         forceMockMode: _forceMock,
         activeFallbackEnabled: true,
@@ -79,7 +92,11 @@ class _DemoHomeScreenState extends State<DemoHomeScreen> {
     );
 
     try {
-      final result = await LivenessSDK.verify(context);
+      final result = await LivenessSDK.verify(
+        context,
+        userId: _userIdController.text,
+        verificationType: 'VERIFICATION',
+      );
       
       setState(() {
         _lastResult = result;
@@ -89,6 +106,397 @@ class _DemoHomeScreenState extends State<DemoHomeScreen> {
       // Show action popup depending on the decision engine outcome
       _evaluateVerificationDecision(result, actionName);
 
+    } catch (e) {
+      setState(() {
+        _isProcessing = false;
+      });
+      _showAlertDialog('Error', 'An unexpected SDK error occurred: $e');
+    }
+  }
+
+  void _showOnboardingFormDialog() {
+    final formKey = GlobalKey<FormState>();
+    final bvnController = TextEditingController(text: '22233344455');
+    final emailController = TextEditingController(text: 'new_user@example.com');
+    final phoneController = TextEditingController(text: '+2348012345678');
+    String selectedChannel = 'personal';
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        bool isRegistering = false;
+        String? errorMessage;
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF171B26),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: const Row(
+                children: [
+                  Icon(Icons.person_add, color: Color(0xFF2979FF)),
+                  SizedBox(width: 10),
+                  Text('Customer Onboarding', style: TextStyle(color: Colors.white)),
+                ],
+              ),
+              content: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Provide customer details to create a record on the backend before biometric verification.',
+                        style: TextStyle(color: Colors.white70, fontSize: 13),
+                      ),
+                      const SizedBox(height: 15),
+                      TextFormField(
+                        controller: bvnController,
+                        keyboardType: TextInputType.number,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: const InputDecoration(
+                          labelText: 'BVN (11 Digits)',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) return 'BVN is required';
+                          if (value.length != 11 || int.tryParse(value) == null) {
+                            return 'BVN must be exactly 11 digits';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: selectedChannel,
+                        dropdownColor: const Color(0xFF171B26),
+                        style: const TextStyle(color: Colors.white),
+                        decoration: const InputDecoration(
+                          labelText: 'Onboarding Channel',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'personal', child: Text('Personal')),
+                          DropdownMenuItem(value: 'business', child: Text('Business')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) {
+                            setDialogState(() {
+                              selectedChannel = val;
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: const InputDecoration(
+                          labelText: 'Email Address',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) return 'Email is required';
+                          if (!value.contains('@') || !value.contains('.')) {
+                            return 'Enter a valid email';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: phoneController,
+                        keyboardType: TextInputType.phone,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: const InputDecoration(
+                          labelText: 'Phone Number',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) return 'Phone number is required';
+                          return null;
+                        },
+                      ),
+                      if (errorMessage != null) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          errorMessage!,
+                          style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isRegistering ? null : () => Navigator.of(context).pop(),
+                  child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+                ),
+                ElevatedButton(
+                  onPressed: isRegistering
+                      ? null
+                      : () async {
+                          if (formKey.currentState!.validate()) {
+                            setDialogState(() {
+                              isRegistering = true;
+                              errorMessage = null;
+                            });
+
+                            try {
+                              // Register customer on the backend
+                              final customer = await _registerCustomerOnBackend(
+                                bvn: bvnController.text,
+                                email: emailController.text,
+                                phone: phoneController.text,
+                                channel: selectedChannel,
+                              );
+
+                              if (context.mounted) {
+                                Navigator.of(context).pop(); // Close dialog
+                                _triggerVerificationOnboarding(
+                                  customerId: customer['customer_id'] as String,
+                                  bvn: customer['bvn'] as String,
+                                  channel: customer['channel'] as String,
+                                );
+                              }
+                            } catch (e) {
+                              setDialogState(() {
+                                isRegistering = false;
+                                errorMessage = e.toString().replaceAll('Exception: ', '');
+                              });
+                            }
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2979FF)),
+                  child: isRegistering
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(Colors.white)),
+                        )
+                      : const Text('Register & Verify', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> _registerCustomerOnBackend({
+    required String bvn,
+    required String email,
+    required String phone,
+    required String channel,
+  }) async {
+    final url = Uri.parse('${_backendUrlController.text}/api/v1/liveness/customer');
+    final response = await http.post(
+      url,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'bvn': bvn,
+        'email': email,
+        'phone': phone,
+        'channel': channel,
+      }),
+    ).timeout(const Duration(seconds: 10));
+
+    if (response.statusCode != 201) {
+      final body = jsonDecode(response.body);
+      throw Exception(body['detail'] ?? 'Failed to register customer record.');
+    }
+
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<void> _triggerVerificationOnboarding({
+    required String customerId,
+    required String bvn,
+    required String channel,
+  }) async {
+    setState(() {
+      _isProcessing = true;
+    });
+
+    // Re-initialize config to capture toggles
+    await _initializeSDK();
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Starting liveness audit for: Onboarding Registration'),
+        duration: Duration(milliseconds: 1000),
+      ),
+    );
+
+    try {
+      final result = await LivenessSDK.verify(
+        context,
+        userId: customerId,
+        bvn: bvn,
+        verificationType: 'ONBOARDING',
+        channel: channel,
+      );
+
+      setState(() {
+        _lastResult = result;
+        _isProcessing = false;
+      });
+
+      _evaluateVerificationDecision(result, 'Account Onboarding');
+    } catch (e) {
+      setState(() {
+        _isProcessing = false;
+      });
+      _showAlertDialog('Error', 'An unexpected SDK error occurred: $e');
+    }
+  }
+
+  void _showFaceVerificationDialog() {
+    final formKey = GlobalKey<FormState>();
+    final userIdController = TextEditingController(text: _userIdController.text);
+    String selectedChannel = 'personal';
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        bool isVerifying = false;
+        String? errorMessage;
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF171B26),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: const Row(
+                children: [
+                  Icon(Icons.face_retouching_natural, color: Color(0xFF22C7D6)),
+                  SizedBox(width: 10),
+                  Text('Face Verification', style: TextStyle(color: Colors.white)),
+                ],
+              ),
+              content: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Provide your user ID to match your current face check against your onboarded reference profile.',
+                        style: TextStyle(color: Colors.white70, fontSize: 13),
+                      ),
+                      const SizedBox(height: 15),
+                      TextFormField(
+                        controller: userIdController,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: const InputDecoration(
+                          labelText: 'Customer UUID / User ID',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) return 'User ID is required';
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: selectedChannel,
+                        dropdownColor: const Color(0xFF171B26),
+                        style: const TextStyle(color: Colors.white),
+                        decoration: const InputDecoration(
+                          labelText: 'Verification Channel',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'personal', child: Text('Personal')),
+                          DropdownMenuItem(value: 'business', child: Text('Business')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) {
+                            setDialogState(() {
+                              selectedChannel = val;
+                            });
+                          }
+                        },
+                      ),
+                      if (errorMessage != null) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          errorMessage!,
+                          style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isVerifying ? null : () => Navigator.of(context).pop(),
+                  child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+                ),
+                ElevatedButton(
+                  onPressed: isVerifying
+                      ? null
+                      : () async {
+                          if (formKey.currentState!.validate()) {
+                            Navigator.of(context).pop(); // Close dialog
+                            _triggerFaceVerification(
+                              userId: userIdController.text,
+                              channel: selectedChannel,
+                            );
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF22C7D6)),
+                  child: const Text('Verify Face', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _triggerFaceVerification({
+    required String userId,
+    required String channel,
+  }) async {
+    setState(() {
+      _isProcessing = true;
+    });
+
+    await _initializeSDK();
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Starting Face Verification check...'),
+        duration: Duration(milliseconds: 1000),
+      ),
+    );
+
+    try {
+      final result = await LivenessSDK.verify(
+        context,
+        userId: userId,
+        verificationType: 'VERIFICATION',
+        channel: channel,
+      );
+
+      setState(() {
+        _lastResult = result;
+        _isProcessing = false;
+      });
+
+      _evaluateVerificationDecision(result, 'Face Verification Linkage');
     } catch (e) {
       setState(() {
         _isProcessing = false;
@@ -235,10 +643,19 @@ class _DemoHomeScreenState extends State<DemoHomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Kolomoni Digital Banking'),
+        title: const Text('FaceGuard'),
         centerTitle: true,
         backgroundColor: const Color(0xFF171B26),
         elevation: 0,
+        bottom: _isProcessing
+            ? const PreferredSize(
+                preferredSize: Size.fromHeight(4.0),
+                child: LinearProgressIndicator(
+                  backgroundColor: Colors.transparent,
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF2979FF)),
+                ),
+              )
+            : null,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
@@ -291,32 +708,25 @@ class _DemoHomeScreenState extends State<DemoHomeScreen> {
               ),
               child: Column(
                 children: [
-                  SwitchListTile(
-                    title: const Text('Simulate Offline Mode (Forced Mock)', style: TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: const Text('Uses local MockLivenessProvider UI instead of the API backend'),
-                    value: _forceMock,
-                    activeColor: const Color(0xFF00E676),
-                    onChanged: (val) {
-                      setState(() {
-                        _forceMock = val;
-                      });
-                      _initializeSDK();
-                    },
-                  ),
-                  if (!_forceMock) ...[
-                    const Divider(height: 24, color: Colors.white12),
-                    TextField(
-                      decoration: const InputDecoration(
-                        labelText: 'FastAPI Backend URL',
-                        border: OutlineInputBorder(),
-                        hintText: 'http://localhost:8000',
-                      ),
-                      controller: TextEditingController()..text = _backendUrl,
-                      onChanged: (val) {
-                        _backendUrl = val;
-                      },
+                  TextField(
+                    enabled: !_isProcessing,
+                    decoration: const InputDecoration(
+                      labelText: 'User ID for Tracking',
+                      border: OutlineInputBorder(),
+                      hintText: 'e.g. cst_user_8855',
                     ),
-                  ],
+                    controller: _userIdController,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    enabled: !_isProcessing,
+                    decoration: const InputDecoration(
+                      labelText: 'FastAPI Backend URL',
+                      border: OutlineInputBorder(),
+                      hintText: 'http://localhost:8000',
+                    ),
+                    controller: _backendUrlController,
+                  ),
                 ],
               ),
             ),
@@ -333,7 +743,15 @@ class _DemoHomeScreenState extends State<DemoHomeScreen> {
               description: 'Run liveness audit check before registering a new user profile.',
               icon: Icons.person_add_outlined,
               color: const Color(0xFF2979FF),
-              onTap: () => _triggerVerification('Account Onboarding'),
+              onTap: _isProcessing ? null : () => _showOnboardingFormDialog(),
+            ),
+            const SizedBox(height: 12),
+            _UseCaseCard(
+              title: 'Account Face Verification',
+              description: 'Compare current face live capture against your registered onboarding face profile.',
+              icon: Icons.face_retouching_natural,
+              color: const Color(0xFF22C7D6),
+              onTap: _isProcessing ? null : () => _showFaceVerificationDialog(),
             ),
             const SizedBox(height: 12),
             _UseCaseCard(
@@ -341,7 +759,7 @@ class _DemoHomeScreenState extends State<DemoHomeScreen> {
               description: 'Require passive facial audit prior to granting secure PIN updates.',
               icon: Icons.lock_reset_outlined,
               color: Colors.purpleAccent,
-              onTap: () => _triggerVerification('Transaction PIN Reset'),
+              onTap: _isProcessing ? null : () => _triggerVerification('Transaction PIN Reset'),
             ),
             const SizedBox(height: 12),
             _UseCaseCard(
@@ -349,7 +767,7 @@ class _DemoHomeScreenState extends State<DemoHomeScreen> {
               description: 'Initiate step-up verification before transferring funds above limit.',
               icon: Icons.monetization_on_outlined,
               color: Colors.amberAccent,
-              onTap: () => _triggerVerification('High-Value Fund Transfer'),
+              onTap: _isProcessing ? null : () => _triggerVerification('High-Value Fund Transfer'),
             ),
             const SizedBox(height: 30),
 
@@ -364,13 +782,13 @@ class _DemoHomeScreenState extends State<DemoHomeScreen> {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: _lastResult!.success
-                      ? const Color(0xFF00E676).withOpacity(0.08)
-                      : Colors.redAccent.withOpacity(0.08),
+                      ? const Color(0xFF00E676).withValues(alpha: 0.08)
+                      : Colors.redAccent.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
                     color: _lastResult!.success
-                        ? const Color(0xFF00E676).withOpacity(0.3)
-                        : Colors.redAccent.withOpacity(0.3),
+                        ? const Color(0xFF00E676).withValues(alpha: 0.3)
+                        : Colors.redAccent.withValues(alpha: 0.3),
                   ),
                 ),
                 child: Column(
@@ -417,7 +835,7 @@ class _UseCaseCard extends StatelessWidget {
   final String description;
   final IconData icon;
   final Color color;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   const _UseCaseCard({
     required this.title,
@@ -429,47 +847,51 @@ class _UseCaseCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      color: const Color(0xFF171B26),
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: Colors.white10),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  shape: BoxShape.circle,
+    final bool isEnabled = onTap != null;
+    return Opacity(
+      opacity: isEnabled ? 1.0 : 0.5,
+      child: Card(
+        color: const Color(0xFF171B26),
+        elevation: 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Colors.white10),
+        ),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, color: color, size: 28),
                 ),
-                child: Icon(icon, color: color, size: 28),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      description,
-                      style: const TextStyle(fontSize: 12, color: Colors.white54, height: 1.3),
-                    ),
-                  ],
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        description,
+                        style: const TextStyle(fontSize: 12, color: Colors.white54, height: 1.3),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.white30),
-            ],
+                const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.white30),
+              ],
+            ),
           ),
         ),
       ),

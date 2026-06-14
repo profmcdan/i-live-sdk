@@ -56,7 +56,13 @@ class LivenessSDK {
 
   /// Launch the verification capture experience.
   /// Pre-requisite: Must have initialized the SDK using [initialize].
-  static Future<LivenessResult> verify(BuildContext context) async {
+  static Future<LivenessResult> verify(
+    BuildContext context, {
+    String? userId,
+    String? bvn,
+    String? verificationType,
+    String? channel,
+  }) async {
     final instance = _instance;
     if (instance == null) {
       throw StateError(
@@ -64,6 +70,12 @@ class LivenessSDK {
       );
     }
     
-    return await instance.provider.verify(context);
+    return await instance.provider.verify(
+      context,
+      userId: userId,
+      bvn: bvn,
+      verificationType: verificationType,
+      channel: channel,
+    );
   }
 }

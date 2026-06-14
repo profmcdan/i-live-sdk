@@ -19,7 +19,13 @@ class MockLivenessProvider implements LivenessProvider {
   }
 
   @override
-  Future<LivenessResult> verify(BuildContext context) async {
+  Future<LivenessResult> verify(
+    BuildContext context, {
+    String? userId,
+    String? bvn,
+    String? verificationType,
+    String? channel,
+  }) async {
     if (!_initialized || _config == null) {
       return LivenessResult.failure(
         LivenessStatus.fail,
@@ -145,7 +151,7 @@ class _MockLivenessVerificationScreenState extends State<_MockLivenessVerificati
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text(
-                          'KOLOMONI LIVENESS',
+                          'FACEGUARD LIVENESS',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 14,
@@ -232,7 +238,7 @@ class _MockLivenessVerificationScreenState extends State<_MockLivenessVerificati
                         
                         // Dummy Face Outline
                         Icon(
-                          Icons.face_retina_scan,
+                          Icons.face,
                           size: 140,
                           color: Colors.white24.withOpacity(0.15),
                         ),

@@ -6,9 +6,13 @@ abstract class LivenessProvider {
   /// Initialize the provider with specific configurations
   Future<void> initialize(LivenessConfig config);
 
-  /// Performs the verification flow.
-  /// Launches UI controls if necessary and coordinates backend validation.
-  Future<LivenessResult> verify(BuildContext context);
+  Future<LivenessResult> verify(
+    BuildContext context, {
+    String? userId,
+    String? bvn,
+    String? verificationType,
+    String? channel,
+  });
   
   /// Helper to check if the current provider is ready to perform validation
   bool get isInitialized;

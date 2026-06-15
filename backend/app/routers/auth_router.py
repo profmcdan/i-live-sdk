@@ -5,9 +5,11 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
+import secrets
+import time
 from app.database import get_db
-from app.models import User, Invite
-from app.auth_utils import verify_password, hash_password, create_access_token, decode_access_token
+from app.models import User, Invite, ApiKey
+from app.auth_utils import verify_password, hash_password, create_access_token, decode_access_token, hash_api_key
 
 router = APIRouter(prefix="/api/v1/auth", tags=["authentication"])
 security = HTTPBearer()
@@ -152,3 +154,55 @@ async def list_users(
 ):
     users = db.query(User).order_by(User.created_at.desc()).all()
     return users
+
+@router.get("/apikey", response_model=dict)
+async def get_apikey(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    key_record = db.query(ApiKey).filter(ApiKey.name == "default", ApiKey.is_active == True).first()
+    if not key_record:
+        return {
+            "has_key": False,
+            "masked_key": None,
+            "created_at": None
+        }
+    return {
+        "has_key": True,
+        "masked_key": "sk_live_********************************",
+        "created_at": key_record.created_at
+    }
+
+@router.post("/apikey/regenerate", response_model=dict)
+async def regenerate_apikey(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # 1. Generate secure random API key string
+    new_key = f"sk_live_{secrets.token_urlsafe(32)}"
+    key_hash = hash_api_key(new_key)
+    masked_key = f"{new_key[:8]}******{new_key[-4:]}"
+    
+    # 2. Deactivate/delete old keys
+    db.query(ApiKey).filter(ApiKey.name == "default").delete()
+    
+    # 3. Create new ApiKey (only hash stored in DB)
+    api_key_record = ApiKey(
+        key_hash=key_hash,
+        name="default",
+        is_active=True,
+        created_at=time.time()
+    )
+    db.add(api_key_record)
+    db.commit()
+    
+    # 4. Clear/flush Redis cache when we regenerate API key
+    from app.redis_cache import clear_redis_cache
+    clear_redis_cache()
+    
+    # 5. Return plain text key (only viewed once!)
+    return {
+        "api_key": new_key,
+        "masked_key": masked_key,
+        "created_at": api_key_record.created_at
+    }

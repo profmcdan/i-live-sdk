@@ -20,6 +20,26 @@ from app.models import LivenessSession, Customer
 Base.metadata.drop_all(bind=engine) # clean start
 Base.metadata.create_all(bind=engine)
 
+from sqlalchemy.orm import sessionmaker
+from app.models import ApiKey
+from app.auth_utils import hash_api_key
+import time
+
+SessionLocal = sessionmaker(bind=engine)
+db = SessionLocal()
+try:
+    hashed_key = hash_api_key("test_api_key_123")
+    api_key_record = ApiKey(
+        key_hash=hashed_key,
+        name="default",
+        is_active=True,
+        created_at=time.time()
+    )
+    db.add(api_key_record)
+    db.commit()
+finally:
+    db.close()
+
 client = TestClient(app)
 
 @pytest.fixture(scope="session", autouse=True)
@@ -41,8 +61,22 @@ def test_health_check():
     assert data["mock_mode"] is True
     assert data["environment"] == "development"
 
-def test_create_session():
+def test_create_session_unauthorized():
+    # 1. Missing API Key
     response = client.post("/api/v1/liveness/session?preferred_mode=ACTIVE")
+    assert response.status_code == 401
+    assert "required" in response.json()["detail"]
+
+    # 2. Invalid API Key
+    response2 = client.post("/api/v1/liveness/session?preferred_mode=ACTIVE", headers={"X-API-Key": "wrong_key"})
+    assert response2.status_code == 401
+    assert "Invalid" in response2.json()["detail"]
+
+def test_create_session():
+    response = client.post(
+        "/api/v1/liveness/session?preferred_mode=ACTIVE",
+        headers={"X-API-Key": "test_api_key_123"}
+    )
     assert response.status_code == 201
     data = response.json()
     assert "session_id" in data
@@ -54,7 +88,10 @@ def test_create_session():
 
 def test_verify_session_pass():
     # Create session first
-    create_response = client.post("/api/v1/liveness/session")
+    create_response = client.post(
+        "/api/v1/liveness/session",
+        headers={"X-API-Key": "test_api_key_123"}
+    )
     assert create_response.status_code == 201
     session_id = create_response.json()["session_id"]
 
@@ -147,7 +184,8 @@ def test_create_customer():
 
     # 2. Create session with this customer_id and bvn
     session_response = client.post(
-        f"/api/v1/liveness/session?user_id={customer_id}&bvn=11122233344&channel=personal&verification_type=ONBOARDING"
+        f"/api/v1/liveness/session?user_id={customer_id}&bvn=11122233344&channel=personal&verification_type=ONBOARDING",
+        headers={"X-API-Key": "test_api_key_123"}
     )
     assert session_response.status_code == 201
     session_data = session_response.json()
@@ -176,7 +214,10 @@ def test_customer_uniqueness_and_retry():
     assert resp2.json()["customer_id"] == customer_id # same ID returned
 
     # Create a PASS session for this customer
-    sess_resp = client.post(f"/api/v1/liveness/session?user_id={customer_id}&bvn={bvn}&channel=personal")
+    sess_resp = client.post(
+        f"/api/v1/liveness/session?user_id={customer_id}&bvn={bvn}&channel=personal",
+        headers={"X-API-Key": "test_api_key_123"}
+    )
     sess_id = sess_resp.json()["session_id"]
     verify_resp = client.post("/api/v1/liveness/verify", json={"session_id": sess_id})
     assert verify_resp.status_code == 200
@@ -211,13 +252,19 @@ def test_face_verification_flow():
     cust_id = cust_resp.json()["customer_id"]
 
     # Create onboarding session and verify (simulates registering reference face)
-    onb_sess = client.post(f"/api/v1/liveness/session?user_id={cust_id}&bvn={bvn}&verification_type=ONBOARDING")
+    onb_sess = client.post(
+        f"/api/v1/liveness/session?user_id={cust_id}&bvn={bvn}&verification_type=ONBOARDING",
+        headers={"X-API-Key": "test_api_key_123"}
+    )
     onb_sess_id = onb_sess.json()["session_id"]
     verify_onb = client.post("/api/v1/liveness/verify", json={"session_id": onb_sess_id})
     assert verify_onb.status_code == 200
 
     # 2. Trigger face verification session for this user (should MATCH successfully)
-    ver_sess = client.post(f"/api/v1/liveness/session?user_id={cust_id}&bvn={bvn}&verification_type=VERIFICATION")
+    ver_sess = client.post(
+        f"/api/v1/liveness/session?user_id={cust_id}&bvn={bvn}&verification_type=VERIFICATION",
+        headers={"X-API-Key": "test_api_key_123"}
+    )
     ver_sess_id = ver_sess.json()["session_id"]
     verify_ver = client.post("/api/v1/liveness/verify", json={"session_id": ver_sess_id})
     assert verify_ver.status_code == 200
@@ -248,7 +295,10 @@ def test_face_verification_flow():
         db.commit()
 
         # 3. Trigger face verification session ending in 'mismatch' (should MISMATCH and FAIL)
-        ver_sess2 = client.post(f"/api/v1/liveness/session?user_id={mism_cust_id}&bvn={mism_bvn}&verification_type=VERIFICATION")
+        ver_sess2 = client.post(
+            f"/api/v1/liveness/session?user_id={mism_cust_id}&bvn={mism_bvn}&verification_type=VERIFICATION",
+            headers={"X-API-Key": "test_api_key_123"}
+        )
         ver_sess_id2 = ver_sess2.json()["session_id"]
         verify_ver2 = client.post("/api/v1/liveness/verify", json={"session_id": ver_sess_id2})
         assert verify_ver2.json()["status"] == "FAIL"

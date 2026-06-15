@@ -25,6 +25,7 @@ class MockLivenessProvider implements LivenessProvider {
     String? bvn,
     String? verificationType,
     String? channel,
+    String? apiKey,
   }) async {
     if (!_initialized || _config == null) {
       return LivenessResult.failure(

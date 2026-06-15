@@ -12,6 +12,7 @@ abstract class LivenessProvider {
     String? bvn,
     String? verificationType,
     String? channel,
+    String? apiKey,
   });
   
   /// Helper to check if the current provider is ready to perform validation

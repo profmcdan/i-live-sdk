@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     
     # Database Settings
     DATABASE_URL: str = "postgresql://postgres:postgres@db:5432/liveness"
+    REDIS_URL: str = "redis://redis:6379/0"
 
     # Admin Settings
     ADMIN_EMAIL: str = "admin@kolomoni.com"

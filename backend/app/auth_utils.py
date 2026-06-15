@@ -39,3 +39,8 @@ def decode_access_token(token: str) -> dict:
         return decoded_token
     except jwt.PyJWTError:
         return None
+
+def hash_api_key(api_key: str) -> str:
+    """Hash API key using SHA-256"""
+    return hashlib.sha256(api_key.encode('utf-8')).hexdigest()
+

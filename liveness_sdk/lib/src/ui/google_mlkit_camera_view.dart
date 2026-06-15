@@ -89,7 +89,12 @@ class _GoogleMlKitCameraViewState extends State<GoogleMlKitCameraView> with Sing
     _timeoutTimer?.cancel();
     _scannerController.dispose();
     _faceDetector.close();
-    _cameraController?.dispose();
+    if (_cameraController != null) {
+      if (_cameraController!.value.isRecordingVideo) {
+        _cameraController!.stopVideoRecording().catchError((e) => debugPrint(e.toString()));
+      }
+      _cameraController!.dispose();
+    }
     super.dispose();
   }
 
@@ -126,8 +131,8 @@ class _GoogleMlKitCameraViewState extends State<GoogleMlKitCameraView> with Sing
       });
 
       _startTimeoutTimer();
-      
-      // Start processing frames from camera stream
+
+      // Start processing frames from camera stream (sequential mode only)
       await _cameraController!.startImageStream((CameraImage image) {
         _processCameraImage(image, frontCamera);
       });
@@ -387,35 +392,29 @@ class _GoogleMlKitCameraViewState extends State<GoogleMlKitCameraView> with Sing
   Future<void> _onPipelineSuccess() async {
     _timeoutTimer?.cancel();
     
-    // 1. Stop image stream so we can record video
+    // Stop image stream so we can record video
     if (_cameraController != null && _cameraController!.value.isStreamingImages) {
       await _cameraController!.stopImageStream();
     }
 
-    // 2. Set guide message to let user know we are recording
     setState(() {
       _guideMessage = 'Securing session... Hold still';
       _frameColor = const Color(0xFF00E676);
     });
 
     try {
-      // 3. Start video recording
+      // Start video recording sequentially
       await _cameraController!.startVideoRecording();
-      
-      // 4. Wait for 2.5 seconds
-      await Future.delayed(const Duration(milliseconds: 2500));
-      
-      // 5. Stop video recording
+      // Record for 5.0 seconds to capture a longer sequential clip
+      await Future.delayed(const Duration(milliseconds: 5000));
       final file = await _cameraController!.stopVideoRecording();
-      
       if (mounted) {
-        // Pop back returning the file path (String) on success
         Navigator.of(context).pop(file.path);
       }
     } catch (e) {
       debugPrint('GoogleMlKitLiveness: Error recording verification video: $e');
       if (mounted) {
-        Navigator.of(context).pop(null); // Return null on error
+        Navigator.of(context).pop(null);
       }
     }
   }
@@ -427,9 +426,14 @@ class _GoogleMlKitCameraViewState extends State<GoogleMlKitCameraView> with Sing
   void _showError(String message) {
     if (!mounted) return;
     
-    // Stop image stream on failure
-    if (_cameraController != null && _cameraController!.value.isStreamingImages) {
-      _cameraController!.stopImageStream().catchError((e) => debugPrint(e.toString()));
+    // Stop image stream and recording on failure
+    if (_cameraController != null) {
+      if (_cameraController!.value.isStreamingImages) {
+        _cameraController!.stopImageStream().catchError((e) => debugPrint(e.toString()));
+      }
+      if (_cameraController!.value.isRecordingVideo) {
+        _cameraController!.stopVideoRecording().catchError((e) => debugPrint(e.toString()));
+      }
     }
 
     showDialog(

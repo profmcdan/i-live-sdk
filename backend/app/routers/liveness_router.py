@@ -1,8 +1,9 @@
 import logging
 import time
 import json
+import hashlib
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Header
 from pydantic import BaseModel, Field
 import boto3
 from sqlalchemy.orm import Session
@@ -10,7 +11,8 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.services.liveness_service import LivenessService, get_liveness_service
 from app.database import get_db
-from app.models import LivenessSession, User, Customer
+from app.models import LivenessSession, User, Customer, ApiKey
+from app.redis_cache import check_cache_api_key, set_cache_api_key
 from app.routers.auth_router import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -167,6 +169,38 @@ async def create_customer(
         created_at=db_customer.created_at
     )
 
+async def verify_api_key(
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+    db: Session = Depends(get_db)
+):
+    if not x_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API Key is required"
+        )
+    key_hash = hashlib.sha256(x_api_key.encode("utf-8")).hexdigest()
+    
+    cached_active = check_cache_api_key(key_hash)
+    if cached_active is not None:
+        if cached_active:
+            return x_api_key
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or deactivated API Key"
+            )
+            
+    api_key_record = db.query(ApiKey).filter(ApiKey.key_hash == key_hash, ApiKey.is_active == True).first()
+    if not api_key_record:
+        set_cache_api_key(key_hash, False)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or deactivated API Key"
+        )
+        
+    set_cache_api_key(key_hash, True)
+    return x_api_key
+
 @router.post(
     "/session",
     response_model=SessionCreateResponse,
@@ -180,6 +214,7 @@ async def create_session(
     bvn: Optional[str] = None,
     verification_type: str = "ONBOARDING",
     channel: str = "personal",
+    api_key: str = Depends(verify_api_key),
     service: LivenessService = Depends(get_liveness_service),
     db: Session = Depends(get_db)
 ):
@@ -472,7 +507,7 @@ async def get_session_video_url(
         parts = path.split("/", 1)
         bucket = parts[0]
         key = parts[1]
-    else:
+    elif db_session.provider == "aws_rekognition":
         # Case B: AWS Rekognition dynamic stream.
         # AWS automatically deposits this under AWS-Rekognition-Liveness-Session-Video/{session_id}/
         try:
@@ -490,8 +525,19 @@ async def get_session_video_url(
         except Exception as e:
             if isinstance(e, HTTPException):
                 raise e
-            logger.error(f"Error listing S3 objects for session {session_id}: {str(e)}")
+            err_msg = str(e)
+            logger.error(f"Error listing S3 objects for session {session_id}: {err_msg}")
+            if "AccessDenied" in err_msg:
+                raise HTTPException(
+                    status_code=403,
+                    detail="AWS S3 ListBucket permission denied. Ensure that the IAM Policy for 'kolomoni-liveness-service' grants 's3:ListBucket' on the bucket resource 'arn:aws:s3:::kolomoni-liveness-bucket'."
+                )
             raise HTTPException(status_code=404, detail="Failed to locate session video on S3")
+    else:
+        raise HTTPException(
+            status_code=404,
+            detail="No video recording captured for this session (e.g. bypassed on emulator or not uploaded)."
+        )
 
     # Generate the S3 Pre-signed URL (valid for 1 hour)
     try:

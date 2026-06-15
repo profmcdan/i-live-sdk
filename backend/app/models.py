@@ -53,4 +53,11 @@ class LivenessSession(Base):
     device_intelligence = Column(Text, default="", nullable=True)  # JSON-encoded telemetry string
     created_at = Column(Float, default=time.time, nullable=False)
     updated_at = Column(Float, default=time.time, onupdate=time.time, nullable=False)
+class ApiKey(Base):
+    __tablename__ = "api_keys"
 
+    id = Column(Integer, primary_key=True, index=True)
+    key_hash = Column(String, unique=True, index=True, nullable=False)
+    name = Column(String, default="default", nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(Float, default=time.time, nullable=False)

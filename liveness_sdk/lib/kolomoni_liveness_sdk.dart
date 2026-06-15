@@ -62,6 +62,7 @@ class LivenessSDK {
     String? bvn,
     String? verificationType,
     String? channel,
+    String? apiKey,
   }) async {
     final instance = _instance;
     if (instance == null) {
@@ -76,6 +77,7 @@ class LivenessSDK {
       bvn: bvn,
       verificationType: verificationType,
       channel: channel,
+      apiKey: apiKey,
     );
   }
 }

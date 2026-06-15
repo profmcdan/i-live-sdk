@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title=settings.APP_NAME,
-    description="Backend API for Kolomoni Liveness Verification SDK",
+    description="Backend API for FaceGuard Liveness Verification SDK",
     version="1.0.0",
     debug=settings.DEBUG
 )
@@ -36,9 +36,10 @@ from app.routers import auth_router
 app.include_router(liveness_router.router)
 app.include_router(auth_router.router)
 
+import time
 from app.database import SessionLocal
-from app.models import User
-from app.auth_utils import hash_password
+from app.models import User, ApiKey
+from app.auth_utils import hash_password, hash_api_key
 
 @app.on_event("startup")
 def startup_event():
@@ -60,7 +61,7 @@ def startup_event():
         else:
             logger.info("Admin user already seeded.")
     except Exception as e:
-        logger.error(f"Error seeding admin user: {e}")
+        logger.error(f"Error seeding database values: {e}")
     finally:
         db.close()
 

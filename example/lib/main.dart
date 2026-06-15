@@ -43,12 +43,14 @@ class _DemoHomeScreenState extends State<DemoHomeScreen> {
 
   late final TextEditingController _userIdController;
   late final TextEditingController _backendUrlController;
+  late final TextEditingController _apiKeyController;
 
   @override
   void initState() {
     super.initState();
     _userIdController = TextEditingController(text: 'cst_user_8855');
     _backendUrlController = TextEditingController(text: 'http://10.0.2.2:8000');
+    _apiKeyController = TextEditingController(text: 'sk_live_-20XSmRKapwGsHMl5yasY5hHI4AFD-_ZuvhpLpEQv_c');
     _initializeSDK();
   }
 
@@ -56,6 +58,7 @@ class _DemoHomeScreenState extends State<DemoHomeScreen> {
   void dispose() {
     _userIdController.dispose();
     _backendUrlController.dispose();
+    _apiKeyController.dispose();
     super.dispose();
   }
 
@@ -66,6 +69,7 @@ class _DemoHomeScreenState extends State<DemoHomeScreen> {
         environment: LivenessEnvironment.development,
         forceMockMode: _forceMock,
         activeFallbackEnabled: true,
+        apiKey: _apiKeyController.text,
       );
       debugPrint('DemoApp: Liveness SDK Initialized successfully.');
     } catch (e) {
@@ -96,6 +100,7 @@ class _DemoHomeScreenState extends State<DemoHomeScreen> {
         context,
         userId: _userIdController.text,
         verificationType: 'VERIFICATION',
+        apiKey: _apiKeyController.text,
       );
       
       setState(() {
@@ -341,6 +346,7 @@ class _DemoHomeScreenState extends State<DemoHomeScreen> {
         bvn: bvn,
         verificationType: 'ONBOARDING',
         channel: channel,
+        apiKey: _apiKeyController.text,
       );
 
       setState(() {
@@ -489,6 +495,7 @@ class _DemoHomeScreenState extends State<DemoHomeScreen> {
         userId: userId,
         verificationType: 'VERIFICATION',
         channel: channel,
+        apiKey: _apiKeyController.text,
       );
 
       setState(() {
@@ -721,11 +728,21 @@ class _DemoHomeScreenState extends State<DemoHomeScreen> {
                   TextField(
                     enabled: !_isProcessing,
                     decoration: const InputDecoration(
-                      labelText: 'FastAPI Backend URL',
+                      labelText: 'SDK API URL',
                       border: OutlineInputBorder(),
                       hintText: 'http://localhost:8000',
                     ),
                     controller: _backendUrlController,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    enabled: !_isProcessing,
+                    decoration: const InputDecoration(
+                      labelText: 'API Key (X-API-Key)',
+                      border: OutlineInputBorder(),
+                      hintText: 'Enter API Key',
+                    ),
+                    controller: _apiKeyController,
                   ),
                 ],
               ),

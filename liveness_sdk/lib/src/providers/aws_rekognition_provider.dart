@@ -32,6 +32,7 @@ class AwsRekognitionLivenessProvider implements LivenessProvider {
     String? bvn,
     String? verificationType,
     String? channel,
+    String? apiKey,
   }) async {
     if (!_initialized || _config == null) {
       return LivenessResult.failure(
@@ -41,6 +42,7 @@ class AwsRekognitionLivenessProvider implements LivenessProvider {
     }
 
     final config = _config!;
+    final activeApiKey = (apiKey != null && apiKey.isNotEmpty) ? apiKey : config.apiKey;
 
     try {
       // 1. Create session from custom FastAPI Backend (FR-002, Section 7/9)
@@ -59,7 +61,7 @@ class AwsRekognitionLivenessProvider implements LivenessProvider {
       );
       final headers = {
         'Content-Type': 'application/json',
-        if (config.apiKey.isNotEmpty) 'X-API-Key': config.apiKey,
+        if (activeApiKey.isNotEmpty) 'X-API-Key': activeApiKey,
       };
 
       debugPrint('LivenessSDK: Requesting session creation from $sessionUrl');
@@ -145,7 +147,7 @@ class AwsRekognitionLivenessProvider implements LivenessProvider {
       }
 
       if (captureSuccess == null || !captureSuccess) {
-        if (videoPath != null) _deleteLocalFile(videoPath);
+        if (videoPath != null && videoPath != 'no_video') _deleteLocalFile(videoPath);
         return LivenessResult.failure(
           LivenessStatus.cancelled,
           'Liveness verification cancelled or failed',
@@ -154,8 +156,8 @@ class AwsRekognitionLivenessProvider implements LivenessProvider {
       }
 
       // If we have a custom recorded video file, upload it strictly to S3 via backend
-      if (videoPath != null) {
-        final uploadOk = await _uploadSessionVideo(sessionId, videoPath, config.backendUrl, config.apiKey);
+      if (videoPath != null && videoPath != 'no_video') {
+        final uploadOk = await _uploadSessionVideo(sessionId, videoPath, config.backendUrl, activeApiKey);
         if (!uploadOk) {
           _deleteLocalFile(videoPath);
           return LivenessResult.failure(

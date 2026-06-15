@@ -37,6 +37,11 @@ function App() {
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
 
+  // API key states
+  const [apiKeyInfo, setApiKeyInfo] = useState({ has_key: false, masked_key: null, created_at: null });
+  const [plainApiKey, setPlainApiKey] = useState('');
+  const [loadingApiKey, setLoadingApiKey] = useState(false);
+
   // Invite states
   const [generatedInvite, setGeneratedInvite] = useState('');
   const [loadingInvite, setLoadingInvite] = useState(false);
@@ -185,6 +190,43 @@ function App() {
     setTimeout(() => setInviteCopied(false), 2000);
   };
 
+  // Fetch API Key info
+  const fetchApiKeyInfo = async () => {
+    if (!token) return;
+    setLoadingApiKey(true);
+    try {
+      const response = await axios.get(`${API_BASE_URL}/api/v1/auth/apikey`, getAuthHeaders());
+      setApiKeyInfo(response.data);
+    } catch (err) {
+      console.error('Failed to load API key metadata', err);
+    } finally {
+      setLoadingApiKey(false);
+    }
+  };
+
+  // Regenerate API Key
+  const regenerateApiKey = async () => {
+    if (!window.confirm("Are you sure you want to regenerate the API key? This will immediately invalidate the active API key and flush the cache!")) {
+      return;
+    }
+    setLoadingApiKey(true);
+    setPlainApiKey('');
+    try {
+      const response = await axios.post(`${API_BASE_URL}/api/v1/auth/apikey/regenerate`, {}, getAuthHeaders());
+      setApiKeyInfo({
+        has_key: true,
+        masked_key: response.data.masked_key,
+        created_at: response.data.created_at
+      });
+      setPlainApiKey(response.data.api_key); // Display the plain text key once
+    } catch (err) {
+      console.error('Failed to regenerate API key', err);
+      alert('Failed to regenerate API key. Please verify privileges.');
+    } finally {
+      setLoadingApiKey(false);
+    }
+  };
+
   // Register New Admin User
   const handleRegister = async (e) => {
     e.preventDefault();
@@ -225,6 +267,8 @@ function App() {
         fetchAnalyticsData();
       } else if (activeTab === 'users') {
         fetchUsers();
+      } else if (activeTab === 'apikeys') {
+        fetchApiKeyInfo();
       }
     }
   }, [token, activeTab]);
@@ -436,6 +480,16 @@ function App() {
             >
               <i className="material-icons">admin_panel_settings</i>
               Admin Panel
+            </button>
+            <button
+              className={`nav-tab-btn ${activeTab === 'apikeys' ? 'active' : ''}`}
+              onClick={() => {
+                setActiveTab('apikeys');
+                setPlainApiKey(''); // clear any previously generated plain key view on navigation
+              }}
+            >
+              <i className="material-icons">vpn_key</i>
+              API Keys
             </button>
           </div>
 
@@ -897,6 +951,87 @@ function App() {
                   </form>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'apikeys' && (
+          <div className="tab-pane">
+            <h3 style={{ marginBottom: '24px' }}>API Key Management</h3>
+
+            <div className="glass-panel" style={{ maxWidth: '600px', margin: '0 auto', padding: '28px' }}>
+              <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                <i className="material-icons" style={{ fontSize: '48px', color: 'var(--accent)', marginBottom: '12px' }}>vpn_key</i>
+                <h4 style={{ color: 'var(--text-primary)', fontSize: '20px' }}>Secure Client Credentials</h4>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginTop: '6px' }}>
+                  Use this API key to authorize session creation calls from your mobile or client applications.
+                </p>
+              </div>
+
+              {loadingApiKey ? (
+                <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-secondary)' }}>
+                  Loading API key credentials...
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  <div className="form-group">
+                    <label style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Active Masked Key</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      readOnly
+                      value={apiKeyInfo.masked_key || 'No active key generated'}
+                      style={{ fontFamily: 'monospace', background: 'rgba(15,23,42,0.02)', letterSpacing: '1px', fontSize: '14px' }}
+                    />
+                    {apiKeyInfo.created_at && (
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', display: 'block' }}>
+                        Generated on {new Date(apiKeyInfo.created_at * 1000).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+
+                  {plainApiKey && (
+                    <div style={{
+                      background: 'rgba(16, 185, 129, 0.08)',
+                      border: '1px solid rgba(16, 185, 129, 0.2)',
+                      borderRadius: '12px',
+                      padding: '16px',
+                      marginTop: '10px'
+                    }}>
+                      <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--success)', display: 'block', marginBottom: '6px' }}>
+                        Plain API Key (Can only be viewed once!)
+                      </span>
+                      <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                        <input
+                          type="text"
+                          className="form-control"
+                          readOnly
+                          value={plainApiKey}
+                          style={{ fontFamily: 'monospace', color: 'var(--text-primary)', background: '#fff', fontSize: '14px', fontWeight: 'bold' }}
+                        />
+                        <button
+                          className="btn-primary"
+                          onClick={() => {
+                            navigator.clipboard.writeText(plainApiKey);
+                            alert("Copied API key to clipboard!");
+                          }}
+                          style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginTop: '8px', fontStyle: 'italic' }}>
+                        Warning: Store this key securely. Once you navigate away or refresh, you will not be able to view it again.
+                      </p>
+                    </div>
+                  )}
+
+                  <button className="btn-primary" onClick={regenerateApiKey} style={{ marginTop: '10px', width: '100%' }}>
+                    <i className="material-icons" style={{ fontSize: '18px' }}>refresh</i>
+                    {apiKeyInfo.has_key ? 'Regenerate API Key' : 'Generate API Key'}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
